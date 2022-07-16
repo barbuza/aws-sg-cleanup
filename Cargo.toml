@@ -1,0 +1,33 @@
+[package]
+name = "aws-sg-cleanup"
+version = "0.1.0"
+description = "Find and remove unused AWS Security Groups"
+license = "MIT"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.58"
+async-trait = "0.1.56"
+aws-config = "0.15.0"
+aws-sdk-ec2 = "0.15.0"
+aws-sdk-elasticache = "0.15.0"
+aws-sdk-elasticloadbalancingv2 = "0.15.0"
+aws-sdk-lambda = "0.15.0"
+aws-sdk-rds = "0.15.0"
+aws-types = "0.15.0"
+base16ct = { version = "0.1.1", features = ["alloc"] }
+clap = { version = "3.2.12", features = ["derive"] }
+cli-table = "0.4.7"
+env_logger = "0.9.0"
+futures = "0.3.21"
+itertools = "0.10.3"
+log = "0.4.17"
+parking_lot = "0.12.1"
+rand = "0.8.5"
+sha-1 = "0.10.0"
+tokio = { version = "1", features = ["full"] }
+
+[profile.release]
+strip = true  # Automatically strip symbols from the binary.
+opt-level = "z"  # Optimize for size.
+lto = true
