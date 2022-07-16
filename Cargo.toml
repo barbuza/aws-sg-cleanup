@@ -1,9 +1,12 @@
 [package]
 name = "aws-sg-cleanup"
-version = "0.1.0"
+version = "0.1.1"
 description = "Find and remove unused AWS Security Groups"
 license = "MIT"
 edition = "2021"
+repository = "https://github.com/barbuza/aws-sg-cleanup/"
+keywords = ["cli", "aws", "security", "group", "cleanup"]
+categories = ["command-line-utilities"]
 
 [dependencies]
 anyhow = "1.0.58"
