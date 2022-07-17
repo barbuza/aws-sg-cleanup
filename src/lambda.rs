@@ -36,7 +36,7 @@ impl KnownSecurityGroups for LambdaGroups {
                         vpc_config
                             .security_group_ids()
                             .unwrap_or_default()
-                            .into_iter()
+                            .iter()
                             .map(|group_id| group_id.to_owned())
                             .collect_vec()
                     })

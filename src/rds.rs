@@ -34,13 +34,13 @@ impl KnownSecurityGroups for RDSGroups {
                 let vpc = db
                     .vpc_security_groups()
                     .unwrap_or_default()
-                    .into_iter()
+                    .iter()
                     .map(|group| group.vpc_security_group_id().unwrap().to_owned())
                     .collect_vec();
                 let classic = db
                     .db_security_groups()
                     .unwrap_or_default()
-                    .into_iter()
+                    .iter()
                     .map(|group| group.db_security_group_name().unwrap().to_owned())
                     .collect_vec();
                 futures::stream::iter(itertools::chain(vpc, classic))
@@ -59,7 +59,7 @@ impl KnownSecurityGroups for RDSGroups {
                     cluster
                         .vpc_security_groups()
                         .unwrap_or_default()
-                        .into_iter()
+                        .iter()
                         .map(|group| group.vpc_security_group_id().unwrap().to_owned())
                         .collect_vec(),
                 )

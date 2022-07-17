@@ -24,22 +24,13 @@ mod utils;
 #[derive(Parser)]
 #[clap(name = "aws-sg-cleanup", bin_name = "aws-sg-cleanup")]
 enum Cli {
-    Print(PrintCommand),
-    Clean(CleanCommand),
-    MakeNoise(MakeNoiseCommand),
+    #[clap(about = "Print all security groups in all regions and services referencing them")]
+    Print,
+    #[clap(about = "Delete unused security groups in all regions")]
+    Clean,
+    #[clap(about = "Create 20 empty security groups in default region")]
+    MakeNoise,
 }
-
-#[derive(clap::Args)]
-#[clap(about = "Print all security groups in all regions and services referencing them")]
-struct PrintCommand {}
-
-#[derive(clap::Args)]
-#[clap(about = "Delete unused security groups in all regions")]
-struct CleanCommand {}
-
-#[derive(clap::Args)]
-#[clap(about = "Create 20 empty security groups in default region")]
-struct MakeNoiseCommand {}
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -53,18 +44,18 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     match args {
-        Cli::Print(_) => print_unused().await?,
-        Cli::Clean(_) => clean_unused().await?,
-        Cli::MakeNoise(_) => make_noise().await?,
+        Cli::Print => print_unused().await?,
+        Cli::Clean => clean_unused().await?,
+        Cli::MakeNoise => make_noise().await?,
     }
 
     Ok(())
 }
 
-async fn load_groups() -> SecurityGroups {
+async fn load_groups() -> anyhow::Result<SecurityGroups> {
     let mut loader = ConcurrentLoader::default();
 
-    for region in load_regions().await {
+    for region in load_regions().await? {
         let sdk_config = aws_config::from_env().region(region.clone()).load().await;
 
         loader
@@ -98,7 +89,7 @@ async fn load_groups() -> SecurityGroups {
             )
             .await;
     }
-    loader.collect().await
+    Ok(loader.collect().await)
 }
 
 async fn make_noise() -> anyhow::Result<()> {
@@ -127,7 +118,7 @@ async fn make_noise() -> anyhow::Result<()> {
 }
 
 async fn print_unused() -> anyhow::Result<()> {
-    let groups = load_groups().await;
+    let groups = load_groups().await?;
     let rows = groups
         .existing_groups
         .iter()
@@ -161,7 +152,7 @@ async fn print_unused() -> anyhow::Result<()> {
 }
 
 async fn clean_unused() -> anyhow::Result<()> {
-    let groups = load_groups().await;
+    let groups = load_groups().await?;
     for (region, unused_groups) in groups
         .find_unused()
         .into_iter()

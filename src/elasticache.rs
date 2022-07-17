@@ -32,11 +32,11 @@ impl KnownSecurityGroups for ElasticacheGroups {
                 let cluster = item.unwrap();
                 let val = itertools::chain(
                     cluster.security_groups().into_iter().flat_map(|x| {
-                        x.into_iter()
+                        x.iter()
                             .map(|x| x.security_group_id().unwrap().to_owned())
                     }),
                     cluster.cache_security_groups().into_iter().flat_map(|x| {
-                        x.into_iter()
+                        x.iter()
                             .map(|x| x.cache_security_group_name().unwrap().to_owned())
                     }),
                 )

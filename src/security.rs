@@ -44,19 +44,19 @@ impl SecurityGroups {
                 let group = item.unwrap();
                 let group_id = group.group_id().unwrap();
 
-                let references = group
+                let references: HashSet<_> = group
                     .ip_permissions()
                     .unwrap_or_default()
-                    .into_iter()
+                    .iter()
                     .flat_map(|permission| {
                         permission
                             .user_id_group_pairs()
                             .unwrap_or_default()
-                            .into_iter()
+                            .iter()
                             .map(|x| x.group_id().unwrap().to_owned())
                     })
                     .filter(|x| x != group_id)
-                    .collect::<HashSet<_>>();
+                    .collect();
 
                 ExistingGroup {
                     region: sdk_config.region().map(|x| x.as_ref().to_owned()).unwrap(),
@@ -82,7 +82,7 @@ impl SecurityGroups {
             .external_references
             .get(group_id)
             .unwrap_or(&vec![])
-            .into_iter()
+            .iter()
             .map(|x| x.to_string())
             .collect_vec();
 

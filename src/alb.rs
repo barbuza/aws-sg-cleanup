@@ -34,7 +34,7 @@ impl KnownSecurityGroups for ALBSGroups {
                     load_balancer
                         .security_groups()
                         .unwrap_or_default()
-                        .into_iter()
+                        .iter()
                         .map(|group| group.to_owned())
                         .collect_vec(),
                 )

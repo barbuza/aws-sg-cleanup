@@ -34,18 +34,18 @@ impl KnownSecurityGroups for EC2Groups {
                 let classic = reservation
                     .groups()
                     .unwrap_or_default()
-                    .into_iter()
+                    .iter()
                     .map(|group| group.group_id().unwrap().to_owned())
                     .collect_vec();
                 let vpc = reservation
                     .instances()
                     .unwrap_or_default()
-                    .into_iter()
+                    .iter()
                     .flat_map(|instance| {
                         instance
                             .security_groups()
                             .unwrap_or_default()
-                            .into_iter()
+                            .iter()
                             .map(|group| group.group_id().unwrap().to_owned())
                     })
                     .collect_vec();
@@ -67,7 +67,7 @@ impl KnownSecurityGroups for EC2Groups {
                 let eni = res.unwrap();
                 eni.groups()
                     .unwrap_or_default()
-                    .into_iter()
+                    .iter()
                     .map(|group| group.group_id().unwrap().to_owned())
                     .collect_vec()
             })
