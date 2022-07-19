@@ -1,29 +1,28 @@
-use std::collections::HashSet;
-
 use aws_sdk_elasticloadbalancingv2::Client;
 use aws_types::SdkConfig;
 use futures::StreamExt;
 use itertools::Itertools;
 
-use crate::security::KnownSecurityGroups;
+use crate::security::{SecurityGroups, SecurityGroupsProvider};
 
-pub struct ALBSGroups {
+pub struct ALBGroups {
     client: Client,
+    region: String,
 }
 
 #[async_trait::async_trait]
-impl KnownSecurityGroups for ALBSGroups {
-    fn source_name() -> &'static str {
-        "alb"
+impl SecurityGroupsProvider<SdkConfig> for ALBGroups {
+    fn new(config: &SdkConfig) -> Self {
+        let client = Client::new(config);
+        Self {
+            client,
+            region: config.region().unwrap().to_string(),
+        }
     }
 
-    fn from_config(config: SdkConfig) -> Self {
-        let client = Client::new(&config);
-        Self { client }
-    }
-
-    async fn load_security_groups(&self) -> HashSet<String> {
-        self.client
+    async fn load(&self) -> SecurityGroups {
+        let group_ids = self
+            .client
             .describe_load_balancers()
             .into_paginator()
             .items()
@@ -39,7 +38,9 @@ impl KnownSecurityGroups for ALBSGroups {
                         .collect_vec(),
                 )
             })
-            .collect::<HashSet<_>>()
-            .await
+            .collect::<Vec<_>>()
+            .await;
+
+        SecurityGroups::create_from_group_ids(format!("alb@{}", self.region), group_ids.into_iter())
     }
 }

@@ -3,34 +3,20 @@ use std::collections::HashSet;
 use aws_sdk_ec2::types::SdkError;
 use clap::Parser;
 use cli_table::{print_stdout, Cell, Style, Table};
-use concurrent::{ConcurrentLoader, LoadedData};
-use futures::FutureExt;
 use itertools::Itertools;
 use log::{info, warn};
 use rand::Rng;
 use security::SecurityGroups;
 use sha1::{Digest, Sha1};
-use utils::load_regions;
+use utils::{load_regional_groups, load_regions};
 
 mod alb;
-mod concurrent;
 mod ec2;
 mod elasticache;
 mod lambda;
 mod rds;
 mod security;
 mod utils;
-
-#[derive(Parser)]
-#[clap(name = "aws-sg-cleanup", bin_name = "aws-sg-cleanup")]
-enum Cli {
-    #[clap(about = "Print all security groups in all regions and services referencing them")]
-    Print,
-    #[clap(about = "Delete unused security groups in all regions")]
-    Clean,
-    #[clap(about = "Create 20 empty security groups in default region")]
-    MakeNoise,
-}
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -52,44 +38,35 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
+#[derive(Parser)]
+#[clap(name = "aws-sg-cleanup", bin_name = "aws-sg-cleanup")]
+enum Cli {
+    #[clap(about = "Print all security groups in all regions and services referencing them")]
+    Print,
+    #[clap(about = "Delete unused security groups in all regions")]
+    Clean,
+    #[clap(about = "Create 20 empty security groups in default region")]
+    MakeNoise,
+}
+
 async fn load_groups() -> anyhow::Result<SecurityGroups> {
-    let mut loader = ConcurrentLoader::default();
+    let regions = load_regions().await?;
 
-    for region in load_regions().await? {
-        let sdk_config = aws_config::from_env().region(region.clone()).load().await;
+    let regional_configs = futures::future::join_all(
+        regions.map(|region| aws_config::from_env().region(region.clone()).load()),
+    )
+    .await;
 
-        loader
-            .spawn_group_loader::<ec2::EC2Groups>(sdk_config.clone())
-            .await;
+    let groups = futures::future::join_all(regional_configs.into_iter().map(load_regional_groups))
+        .await
+        .into_iter()
+        .flatten()
+        .fold(SecurityGroups::default(), |mut acc, item| {
+            acc.merge(&item);
+            acc
+        });
 
-        loader
-            .spawn_group_loader::<lambda::LambdaGroups>(sdk_config.clone())
-            .await;
-
-        loader
-            .spawn_group_loader::<rds::RDSGroups>(sdk_config.clone())
-            .await;
-
-        loader
-            .spawn_group_loader::<alb::ALBSGroups>(sdk_config.clone())
-            .await;
-
-        loader
-            .spawn_group_loader::<elasticache::ElasticacheGroups>(sdk_config.clone())
-            .await;
-
-        info!("loading security groups from {}", region);
-        let sdk_config = sdk_config.clone();
-        loader
-            .spawn_concurrently(
-                async move {
-                    LoadedData::ExistingGroups(SecurityGroups::load_existing(sdk_config).await)
-                }
-                .boxed_local(),
-            )
-            .await;
-    }
-    Ok(loader.collect().await)
+    Ok(groups)
 }
 
 async fn make_noise() -> anyhow::Result<()> {
@@ -126,7 +103,7 @@ async fn print_unused() -> anyhow::Result<()> {
         .map(|group| {
             let group_id = group.group_id.clone();
             let refs = groups
-                .collect_referencing_services(&group_id, HashSet::default())
+                .collect_referencing_services(&group_id, HashSet::new())
                 .iter()
                 .join(", ");
 

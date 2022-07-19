@@ -1,29 +1,29 @@
-use std::collections::HashSet;
-
 use async_trait::async_trait;
 use aws_sdk_lambda::Client;
+use aws_types::SdkConfig;
 use futures::StreamExt;
 use itertools::Itertools;
 
-use crate::security::KnownSecurityGroups;
+use crate::security::{SecurityGroups, SecurityGroupsProvider};
 
 pub struct LambdaGroups {
     client: Client,
+    region: String,
 }
 
 #[async_trait]
-impl KnownSecurityGroups for LambdaGroups {
-    fn source_name() -> &'static str {
-        "lambda"
+impl SecurityGroupsProvider<SdkConfig> for LambdaGroups {
+    fn new(config: &SdkConfig) -> Self {
+        let client = Client::new(config);
+        Self {
+            client,
+            region: config.region().unwrap().to_string(),
+        }
     }
 
-    fn from_config(config: aws_types::SdkConfig) -> Self {
-        let client = Client::new(&config);
-        Self { client }
-    }
-
-    async fn load_security_groups(&self) -> HashSet<String> {
-        self.client
+    async fn load(&self) -> SecurityGroups {
+        let group_ids = self
+            .client
             .list_functions()
             .into_paginator()
             .items()
@@ -43,7 +43,12 @@ impl KnownSecurityGroups for LambdaGroups {
                     .unwrap_or_default();
                 futures::stream::iter(groups)
             })
-            .collect::<HashSet<_>>()
-            .await
+            .collect::<Vec<_>>()
+            .await;
+
+        SecurityGroups::create_from_group_ids(
+            format!("lambda@{}", self.region),
+            group_ids.into_iter(),
+        )
     }
 }

@@ -1,28 +1,27 @@
-use std::collections::HashSet;
-
 use async_trait::async_trait;
 use aws_sdk_rds::Client;
+use aws_types::SdkConfig;
 use futures::StreamExt;
 use itertools::Itertools;
 
-use crate::security::KnownSecurityGroups;
+use crate::security::{SecurityGroups, SecurityGroupsProvider};
 
 pub struct RDSGroups {
     client: Client,
+    region: String,
 }
 
 #[async_trait]
-impl KnownSecurityGroups for RDSGroups {
-    fn source_name() -> &'static str {
-        "rds"
+impl SecurityGroupsProvider<SdkConfig> for RDSGroups {
+    fn new(config: &SdkConfig) -> Self {
+        let client = Client::new(config);
+        Self {
+            client,
+            region: config.region().unwrap().to_string(),
+        }
     }
 
-    fn from_config(config: aws_types::SdkConfig) -> Self {
-        let client = Client::new(&config);
-        Self { client }
-    }
-
-    async fn load_security_groups(&self) -> HashSet<String> {
+    async fn load(&self) -> SecurityGroups {
         let db = self
             .client
             .describe_db_instances()
@@ -45,8 +44,7 @@ impl KnownSecurityGroups for RDSGroups {
                     .collect_vec();
                 futures::stream::iter(itertools::chain(vpc, classic))
             })
-            .collect::<HashSet<_>>()
-            .await;
+            .collect::<Vec<_>>();
         let aurora = self
             .client
             .describe_db_clusters()
@@ -64,8 +62,13 @@ impl KnownSecurityGroups for RDSGroups {
                         .collect_vec(),
                 )
             })
-            .collect::<HashSet<_>>()
-            .await;
-        itertools::chain(db, aurora).collect()
+            .collect::<Vec<_>>();
+
+        let (db, aurora) = tokio::join!(db, aurora);
+
+        SecurityGroups::create_from_group_ids(
+            format!("rds@{}", self.region),
+            itertools::chain(db, aurora),
+        )
     }
 }

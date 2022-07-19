@@ -1,28 +1,27 @@
-use std::collections::HashSet;
-
 use async_trait::async_trait;
 use aws_sdk_ec2::Client;
+use aws_types::SdkConfig;
 use futures::StreamExt;
 use itertools::Itertools;
 
-use crate::security::KnownSecurityGroups;
+use crate::security::{SecurityGroups, SecurityGroupsProvider};
 
 pub struct EC2Groups {
     client: Client,
+    region: String,
 }
 
 #[async_trait]
-impl KnownSecurityGroups for EC2Groups {
-    fn source_name() -> &'static str {
-        "ec2"
+impl SecurityGroupsProvider<SdkConfig> for EC2Groups {
+    fn new(config: &SdkConfig) -> Self {
+        let client = Client::new(config);
+        Self {
+            client,
+            region: config.region().unwrap().to_string(),
+        }
     }
 
-    fn from_config(config: aws_types::SdkConfig) -> Self {
-        let client = Client::new(&config);
-        Self { client }
-    }
-
-    async fn load_security_groups(&self) -> HashSet<String> {
+    async fn load(&self) -> SecurityGroups {
         let instances_groups = self
             .client
             .describe_instances()
@@ -51,8 +50,7 @@ impl KnownSecurityGroups for EC2Groups {
                     .collect_vec();
                 futures::stream::iter(itertools::chain(classic, vpc))
             })
-            .collect::<HashSet<_>>()
-            .await;
+            .collect::<Vec<_>>();
 
         let eni_groups = self
             .client
@@ -60,19 +58,23 @@ impl KnownSecurityGroups for EC2Groups {
             .into_paginator()
             .items()
             .send()
-            .collect::<Vec<_>>()
-            .await
-            .into_iter()
             .flat_map(|res| {
                 let eni = res.unwrap();
-                eni.groups()
-                    .unwrap_or_default()
-                    .iter()
-                    .map(|group| group.group_id().unwrap().to_owned())
-                    .collect_vec()
+                futures::stream::iter(
+                    eni.groups()
+                        .unwrap_or_default()
+                        .iter()
+                        .map(|group| group.group_id().unwrap().to_owned())
+                        .collect_vec(),
+                )
             })
-            .collect::<HashSet<_>>();
+            .collect::<Vec<_>>();
 
-        itertools::chain(instances_groups, eni_groups).collect()
+        let (instances_groups, eni_groups) = tokio::join!(instances_groups, eni_groups);
+
+        SecurityGroups::create_from_group_ids(
+            format!("ec2@{}", self.region),
+            itertools::chain(instances_groups, eni_groups),
+        )
     }
 }

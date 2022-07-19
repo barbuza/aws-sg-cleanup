@@ -1,6 +1,6 @@
 [package]
 name = "aws-sg-cleanup"
-version = "0.1.2"
+version = "0.1.3"
 description = "Find and remove unused AWS Security Groups"
 license = "MIT"
 edition = "2021"
@@ -26,10 +26,11 @@ env_logger = "0.9.0"
 futures = "0.3.21"
 itertools = "0.10.3"
 log = "0.4.17"
+maplit = "1.0.2"
 parking_lot = "0.12.1"
 rand = "0.8.5"
 sha-1 = "0.10.0"
-tokio = { version = "1", features = ["full"] }
+tokio = { version = "1.20.0", features = ["full"] }
 
 [profile.release]
 strip = true  # Automatically strip symbols from the binary.
