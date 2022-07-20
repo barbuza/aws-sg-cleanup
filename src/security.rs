@@ -8,12 +8,8 @@ use itertools::Itertools;
 use maplit::hashmap;
 
 #[async_trait]
-pub trait SecurityGroupsProvider<T>
-where
-    T: Clone,
-{
-    fn new(config: &T) -> Self;
-    async fn load(&self) -> SecurityGroups;
+pub trait SecurityGroupsProvider<T> {
+    async fn load(config: &T) -> SecurityGroups;
 }
 
 type ReferenceServiceName = String;
@@ -34,24 +30,13 @@ pub struct ExistingGroup {
     pub references: HashSet<String>,
 }
 
-pub struct AWSSecurityGroups {
-    client: Client,
-    region: String,
-}
+pub struct AWSSecurityGroups {}
 
 #[async_trait]
 impl SecurityGroupsProvider<SdkConfig> for AWSSecurityGroups {
-    fn new(config: &SdkConfig) -> Self {
+    async fn load(config: &SdkConfig) -> SecurityGroups {
         let client = Client::new(config);
-        Self {
-            client,
-            region: config.region().unwrap().to_string(),
-        }
-    }
-
-    async fn load(&self) -> SecurityGroups {
-        let existing_groups = self
-            .client
+        let existing_groups = client
             .describe_security_groups()
             .into_paginator()
             .items()
@@ -84,7 +69,7 @@ impl SecurityGroupsProvider<SdkConfig> for AWSSecurityGroups {
                     .collect();
 
                 ExistingGroup {
-                    region: self.region.clone(),
+                    region: config.region().unwrap().to_string(),
                     group_id,
                     group_name,
                     group_description,

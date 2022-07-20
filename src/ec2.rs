@@ -6,24 +6,13 @@ use itertools::Itertools;
 
 use crate::security::{SecurityGroups, SecurityGroupsProvider};
 
-pub struct EC2Groups {
-    client: Client,
-    region: String,
-}
+pub struct EC2Groups {}
 
 #[async_trait]
 impl SecurityGroupsProvider<SdkConfig> for EC2Groups {
-    fn new(config: &SdkConfig) -> Self {
+    async fn load(config: &SdkConfig) -> SecurityGroups {
         let client = Client::new(config);
-        Self {
-            client,
-            region: config.region().unwrap().to_string(),
-        }
-    }
-
-    async fn load(&self) -> SecurityGroups {
-        let instances_groups = self
-            .client
+        let instances_groups = client
             .describe_instances()
             .into_paginator()
             .items()
@@ -52,8 +41,7 @@ impl SecurityGroupsProvider<SdkConfig> for EC2Groups {
             })
             .collect::<Vec<_>>();
 
-        let eni_groups = self
-            .client
+        let eni_groups = client
             .describe_network_interfaces()
             .into_paginator()
             .items()
@@ -73,7 +61,7 @@ impl SecurityGroupsProvider<SdkConfig> for EC2Groups {
         let (instances_groups, eni_groups) = tokio::join!(instances_groups, eni_groups);
 
         SecurityGroups::create_from_group_ids(
-            format!("ec2@{}", self.region),
+            format!("ec2@{}", config.region().unwrap()),
             itertools::chain(instances_groups, eni_groups),
         )
     }

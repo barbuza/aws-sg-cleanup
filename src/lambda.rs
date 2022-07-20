@@ -6,24 +6,13 @@ use itertools::Itertools;
 
 use crate::security::{SecurityGroups, SecurityGroupsProvider};
 
-pub struct LambdaGroups {
-    client: Client,
-    region: String,
-}
+pub struct LambdaGroups {}
 
 #[async_trait]
 impl SecurityGroupsProvider<SdkConfig> for LambdaGroups {
-    fn new(config: &SdkConfig) -> Self {
+    async fn load(config: &SdkConfig) -> SecurityGroups {
         let client = Client::new(config);
-        Self {
-            client,
-            region: config.region().unwrap().to_string(),
-        }
-    }
-
-    async fn load(&self) -> SecurityGroups {
-        let group_ids = self
-            .client
+        let group_ids = client
             .list_functions()
             .into_paginator()
             .items()
@@ -47,7 +36,7 @@ impl SecurityGroupsProvider<SdkConfig> for LambdaGroups {
             .await;
 
         SecurityGroups::create_from_group_ids(
-            format!("lambda@{}", self.region),
+            format!("lambda@{}", config.region().unwrap()),
             group_ids.into_iter(),
         )
     }

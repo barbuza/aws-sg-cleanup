@@ -6,24 +6,13 @@ use itertools::Itertools;
 
 use crate::security::{SecurityGroups, SecurityGroupsProvider};
 
-pub struct RDSGroups {
-    client: Client,
-    region: String,
-}
+pub struct RDSGroups {}
 
 #[async_trait]
 impl SecurityGroupsProvider<SdkConfig> for RDSGroups {
-    fn new(config: &SdkConfig) -> Self {
+    async fn load(config: &SdkConfig) -> SecurityGroups {
         let client = Client::new(config);
-        Self {
-            client,
-            region: config.region().unwrap().to_string(),
-        }
-    }
-
-    async fn load(&self) -> SecurityGroups {
-        let db = self
-            .client
+        let db = client
             .describe_db_instances()
             .into_paginator()
             .items()
@@ -45,8 +34,7 @@ impl SecurityGroupsProvider<SdkConfig> for RDSGroups {
                 futures::stream::iter(itertools::chain(vpc, classic))
             })
             .collect::<Vec<_>>();
-        let aurora = self
-            .client
+        let aurora = client
             .describe_db_clusters()
             .into_paginator()
             .items()
@@ -67,7 +55,7 @@ impl SecurityGroupsProvider<SdkConfig> for RDSGroups {
         let (db, aurora) = tokio::join!(db, aurora);
 
         SecurityGroups::create_from_group_ids(
-            format!("rds@{}", self.region),
+            format!("rds@{}", config.region().unwrap()),
             itertools::chain(db, aurora),
         )
     }

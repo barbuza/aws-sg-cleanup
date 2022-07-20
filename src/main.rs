@@ -1,14 +1,14 @@
 use std::collections::HashSet;
 
-use aws_sdk_ec2::types::SdkError;
+use aws_sdk_ec2::{types::SdkError, Region};
 use clap::Parser;
 use cli_table::{print_stdout, Cell, Style, Table};
 use itertools::Itertools;
 use log::{info, warn};
 use rand::Rng;
-use security::SecurityGroups;
+use security::{SecurityGroups, SecurityGroupsProvider};
 use sha1::{Digest, Sha1};
-use utils::{load_regional_groups, load_regions};
+use utils::load_regions;
 
 mod alb;
 mod ec2;
@@ -50,23 +50,39 @@ enum Cli {
 }
 
 async fn load_groups() -> anyhow::Result<SecurityGroups> {
-    let regions = load_regions().await?;
+    let regions = load_regions().await?.map(load_region);
 
-    let regional_configs = futures::future::join_all(
-        regions.map(|region| aws_config::from_env().region(region.clone()).load()),
-    )
-    .await;
-
-    let groups = futures::future::join_all(regional_configs.into_iter().map(load_regional_groups))
-        .await
-        .into_iter()
-        .flatten()
-        .fold(SecurityGroups::default(), |mut acc, item| {
+    let groups = futures::future::join_all(regions).await.into_iter().fold(
+        SecurityGroups::default(),
+        |mut acc, item| {
             acc.merge(&item);
             acc
-        });
+        },
+    );
 
     Ok(groups)
+}
+
+async fn load_region(region: Region) -> SecurityGroups {
+    let sdk_config = aws_config::from_env().region(region.clone()).load().await;
+
+    let res = futures::future::join_all(vec![
+        ec2::EC2Groups::load(&sdk_config),
+        alb::ALBGroups::load(&sdk_config),
+        elasticache::ElasticacheGroups::load(&sdk_config),
+        lambda::LambdaGroups::load(&sdk_config),
+        rds::RDSGroups::load(&sdk_config),
+        security::AWSSecurityGroups::load(&sdk_config),
+    ])
+    .await
+    .into_iter()
+    .fold(SecurityGroups::default(), |mut acc, item| {
+        acc.merge(&item);
+        acc
+    });
+
+    info!("{} loaded", region);
+    res
 }
 
 async fn make_noise() -> anyhow::Result<()> {

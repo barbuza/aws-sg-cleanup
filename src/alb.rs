@@ -5,24 +5,13 @@ use itertools::Itertools;
 
 use crate::security::{SecurityGroups, SecurityGroupsProvider};
 
-pub struct ALBGroups {
-    client: Client,
-    region: String,
-}
+pub struct ALBGroups {}
 
 #[async_trait::async_trait]
 impl SecurityGroupsProvider<SdkConfig> for ALBGroups {
-    fn new(config: &SdkConfig) -> Self {
+    async fn load(config: &SdkConfig) -> SecurityGroups {
         let client = Client::new(config);
-        Self {
-            client,
-            region: config.region().unwrap().to_string(),
-        }
-    }
-
-    async fn load(&self) -> SecurityGroups {
-        let group_ids = self
-            .client
+        let group_ids = client
             .describe_load_balancers()
             .into_paginator()
             .items()
@@ -41,6 +30,9 @@ impl SecurityGroupsProvider<SdkConfig> for ALBGroups {
             .collect::<Vec<_>>()
             .await;
 
-        SecurityGroups::create_from_group_ids(format!("alb@{}", self.region), group_ids.into_iter())
+        SecurityGroups::create_from_group_ids(
+            format!("alb@{}", config.region().unwrap()),
+            group_ids.into_iter(),
+        )
     }
 }
